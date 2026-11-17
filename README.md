@@ -2,6 +2,8 @@
 
 This project allows an ESP32 board to control **four nRF24L01+ modules** for RF jamming (Bluetooth jammer, BLE jammer, WiFi jammer, RC jammer, ...) or channel sweeping across multiple 2.4GHz bands. Each module can be independently controlled and jam on its own channel. Modes are selectable via serial commands.
 
+A **0.96" SSD1306 OLED (I²C)** mirrors the serial console: all status, help, mode-change, and module-init messages are shown as a scrolling on-device log, so the unit can be operated without a computer attached.
+
 ---
 ## Pin Mapping
 
@@ -27,6 +29,22 @@ This guide shows how to connect **four nRF24L01+ modules** to an **ESP32**, usin
 | GPIO2    | CSN            | -                | -                | ✅ (Module 3)     | -                |
 | GPIO16   | CE             | -                | -                | -                | ✅ (Module 4)     |
 | GPIO17   | CSN            | -                | -                | -                | ✅ (Module 4)     |
+
+## 📟 OLED Display (0.96" SSD1306, I²C)
+
+The display connects over I²C using two pins that are free in the wiring above.
+
+| OLED Pin | ESP32 Pin | Function   |
+|----------|-----------|------------|
+| VCC      | 3.3V      | Power      |
+| GND      | GND       | Ground     |
+| SDA      | GPIO21    | I²C data   |
+| SCL      | GPIO22    | I²C clock  |
+
+Defaults (editable at the top of `WhiteNoise/WhiteNoise.ino`):
+
+- I²C address: `0x3C` (some modules use `0x3D`)
+- SDA: `GPIO21`, SCL: `GPIO22`
 
 ## ⚠️ Power and Misc
 
@@ -86,12 +104,22 @@ All modules: VCC to 3.3V, GND to GND (do NOT use 5V!)
 
 ---
 
+## Required Libraries
+
+Install via the Arduino Library Manager:
+
+- **RF24** (nRF24L01+ radios)
+- **Adafruit SSD1306** (OLED driver)
+- **Adafruit GFX Library** (graphics primitives used by the OLED driver)
+
+---
+
 ## Usage
 
-1. Wire up the ESP32 and 4x nRF24L01+ modules as shown above.
+1. Wire up the ESP32, 4x nRF24L01+ modules, and the OLED as shown above.
 2. Flash the provided firmware to your ESP32.
 3. Open a serial terminal at 115200 baud.
-4. Use the commands above to control the jammers.
+4. Use the commands above to control the jammers — output appears both in the serial terminal and on the OLED.
 
 ---
 

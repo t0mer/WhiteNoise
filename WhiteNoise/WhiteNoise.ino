@@ -1,7 +1,28 @@
 #include "RF24.h"
 #include <SPI.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 #include "esp_bt.h"
 #include "esp_wifi.h"
+
+// === OLED Display (0.96" SSD1306, I2C) ===
+#define OLED_WIDTH   128
+#define OLED_HEIGHT  64
+#define OLED_RESET   -1      // no reset pin on most 0.96" I2C modules
+#define OLED_ADDR    0x3C    // common default; some modules use 0x3D
+#define OLED_SDA     21      // I2C data  (free pin on this wiring)
+#define OLED_SCL     22      // I2C clock (free pin on this wiring)
+
+Adafruit_SSD1306 display(OLED_WIDTH, OLED_HEIGHT, &Wire, OLED_RESET);
+
+// Scrolling text log mirrored from the serial console.
+// 128x64 with the default 6x8 font = 21 columns x 8 rows.
+#define LOG_ROWS 8
+#define LOG_COLS 21
+String logBuffer[LOG_ROWS];
+int logCount = 0;
+bool displayReady = false;
 
 // === Channel Definitions ===
 byte bluetooth_even_channels[] = {
@@ -59,6 +80,7 @@ bool jammersActive = false;    // Flag for running state
 
 void setup() {
   Serial.begin(115200);
+  initDisplay();
   printWelcomeMessage();
 }
 
@@ -67,12 +89,74 @@ void loop() {
   if (jammersActive) runCurrentMode();
 }
 
+// === Display / Logging ===
+
+void initDisplay() {
+  Wire.begin(OLED_SDA, OLED_SCL);
+  if (display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR)) {
+    displayReady = true;
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setTextWrap(false);
+    display.display();
+  } else {
+    Serial.println("OLED init failed (check wiring / I2C address)");
+  }
+}
+
+// Push a single row into the ring buffer, scrolling older rows up.
+void pushRow(const String &row) {
+  if (logCount < LOG_ROWS) {
+    logBuffer[logCount++] = row;
+  } else {
+    for (int i = 1; i < LOG_ROWS; i++) logBuffer[i - 1] = logBuffer[i];
+    logBuffer[LOG_ROWS - 1] = row;
+  }
+}
+
+// Wrap a logical line to the display width before pushing it.
+void appendRow(String row) {
+  if (row.length() == 0) { pushRow(""); return; }
+  while (row.length() > LOG_COLS) {
+    pushRow(row.substring(0, LOG_COLS));
+    row = row.substring(LOG_COLS);
+  }
+  pushRow(row);
+}
+
+void renderLog() {
+  if (!displayReady) return;
+  display.clearDisplay();
+  for (int i = 0; i < logCount; i++) {
+    display.setCursor(0, i * 8);
+    display.print(logBuffer[i]);
+  }
+  display.display();
+}
+
+// Mirror a message to both the serial console and the OLED.
+// Handles embedded newlines so multi-line messages scroll correctly.
+void logLine(const String &msg) {
+  Serial.println(msg);
+  if (!displayReady) return;
+  int start = 0;
+  while (true) {
+    int nl = msg.indexOf('\n', start);
+    String piece = (nl == -1) ? msg.substring(start) : msg.substring(start, nl);
+    appendRow(piece);
+    if (nl == -1) break;
+    start = nl + 1;
+  }
+  renderLog();
+}
+
 void printWelcomeMessage() {
-  Serial.println("\nRF Jammer Controller Ready for 4 nRF24 Modules");
-  Serial.println("System is in standby mode");
+  logLine("\nRF Jammer Controller Ready for 4 nRF24 Modules");
+  logLine("System is in standby mode");
   printModeHelp();
-  Serial.println("Send 'start' to initialize jammers");
-  Serial.println("Send 'stop' to deactivate jammers");
+  logLine("Send 'start' to initialize jammers");
+  logLine("Send 'stop' to deactivate jammers");
 }
 
 void handleSerialInput() {
@@ -83,33 +167,32 @@ void handleSerialInput() {
       if (!jammersActive) {
         initializeJammers();
         jammersActive = true;
-        Serial.println("Jammers activated and running");
+        logLine("Jammers activated and running");
       } else {
-        Serial.println("Jammers are already active");
+        logLine("Jammers are already active");
       }
     }
     else if (input.equalsIgnoreCase("stop")) {
       if (jammersActive) {
         deactivateJammers();
         jammersActive = false;
-        Serial.println("Jammers deactivated");
+        logLine("Jammers deactivated");
       } else {
-        Serial.println("Jammers are already inactive");
+        logLine("Jammers are already inactive");
       }
     }
     else if (input.length() == 1 && isValidMode(input.charAt(0))) {
       mode = input.charAt(0);
-      Serial.print("Mode changed to: ");
-      printModeName(mode);
+      logLine("Mode changed to: " + modeName(mode));
       if (jammersActive) {
-        Serial.println("(Change will take effect immediately)");
+        logLine("(Change will take effect immediately)");
       }
     }
     else if (input.equalsIgnoreCase("help") || input.equals("?")) {
       printModeHelp();
     }
     else {
-      Serial.println("Unknown command. Send 'help' for options.");
+      logLine("Unknown command. Send 'help' for options.");
     }
   }
 }
@@ -125,32 +208,32 @@ void initializeJammers() {
   SPIClass *hspi = new SPIClass(HSPI);
   hspi->begin(14, 12, 13, -1); // SCK=14, MISO=12, MOSI=13
   if (radio_hspi1.begin(hspi)) {
-    Serial.println("HSPI Module 1 Jammer Initialized!");
+    logLine("HSPI Module 1 Jammer Initialized!");
     configureRadio(radio_hspi1, ch[0]);
   } else {
-    Serial.println("HSPI Module 1 initialization failed!");
+    logLine("HSPI Module 1 initialization failed!");
   }
   if (radio_hspi2.begin(hspi)) {
-    Serial.println("HSPI Module 2 Jammer Initialized!");
+    logLine("HSPI Module 2 Jammer Initialized!");
     configureRadio(radio_hspi2, ch[1]);
   } else {
-    Serial.println("HSPI Module 2 initialization failed!");
+    logLine("HSPI Module 2 initialization failed!");
   }
 
   // Initialize VSPI (Modules 3 & 4)
   SPIClass *vspi = new SPIClass(VSPI);
   vspi->begin(18, 19, 23, -1); // SCK=18, MISO=19, MOSI=23
   if (radio_vspi1.begin(vspi)) {
-    Serial.println("VSPI Module 3 Jammer Initialized!");
+    logLine("VSPI Module 3 Jammer Initialized!");
     configureRadio(radio_vspi1, ch[2]);
   } else {
-    Serial.println("VSPI Module 3 initialization failed!");
+    logLine("VSPI Module 3 initialization failed!");
   }
   if (radio_vspi2.begin(vspi)) {
-    Serial.println("VSPI Module 4 Jammer Initialized!");
+    logLine("VSPI Module 4 Jammer Initialized!");
     configureRadio(radio_vspi2, ch[3]);
   } else {
-    Serial.println("VSPI Module 4 initialization failed!");
+    logLine("VSPI Module 4 initialization failed!");
   }
 }
 
@@ -159,7 +242,7 @@ void deactivateJammers() {
   radio_hspi2.stopConstCarrier();
   radio_vspi1.stopConstCarrier();
   radio_vspi2.stopConstCarrier();
-  Serial.println("All jammers stopped transmission");
+  logLine("All jammers stopped transmission");
 }
 
 void runCurrentMode() {
@@ -209,30 +292,30 @@ bool isValidMode(char m) {
 }
 
 void printModeHelp() {
-  Serial.println("\nAvailable commands:");
-  Serial.println("start  - Initialize and activate jammers");
-  Serial.println("stop   - Deactivate jammers");
-  Serial.println("help/? - Show this help");
-  Serial.println("\nAvailable modes (send single character):");
-  Serial.println("r - Random Bluetooth hopping (odd/even)");
-  Serial.println("w - WiFi channels");
-  Serial.println("b - BLE advertising channels");
-  Serial.println("u - USB wireless channels");
-  Serial.println("v - Video streaming channels");
-  Serial.println("c - RC toys/drones channels");
-  Serial.println("f - Full spectrum (all channels)");
+  logLine("\nAvailable commands:");
+  logLine("start  - Initialize and activate jammers");
+  logLine("stop   - Deactivate jammers");
+  logLine("help/? - Show this help");
+  logLine("\nAvailable modes (send single character):");
+  logLine("r - Random Bluetooth hopping (odd/even)");
+  logLine("w - WiFi channels");
+  logLine("b - BLE advertising channels");
+  logLine("u - USB wireless channels");
+  logLine("v - Video streaming channels");
+  logLine("c - RC toys/drones channels");
+  logLine("f - Full spectrum (all channels)");
 }
 
-void printModeName(char m) {
-  switch(m) {
-    case 'r': Serial.println("Random Bluetooth hopping (odd/even)"); break;
-    case 'w': Serial.println("WiFi channels"); break;
-    case 'b': Serial.println("BLE advertising channels"); break;
-    case 'u': Serial.println("USB wireless channels"); break;
-    case 'v': Serial.println("Video streaming channels"); break;
-    case 'c': Serial.println("RC toys/drones channels"); break;
-    case 'f': Serial.println("Full spectrum (all channels)"); break;
-    default: Serial.println("Unknown mode"); break;
+String modeName(char m) {
+  switch (m) {
+    case 'r': return "Random Bluetooth hopping (odd/even)";
+    case 'w': return "WiFi channels";
+    case 'b': return "BLE advertising channels";
+    case 'u': return "USB wireless channels";
+    case 'v': return "Video streaming channels";
+    case 'c': return "RC toys/drones channels";
+    case 'f': return "Full spectrum (all channels)";
+    default:  return "Unknown mode";
   }
 }
 
