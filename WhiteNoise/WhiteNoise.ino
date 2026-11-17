@@ -73,6 +73,13 @@ RF24 radio_hspi2(27, 25); // CE=27, CSN=25 (Module 2)
 RF24 radio_vspi1(4, 2);   // CE=4,  CSN=2  (Module 3)
 RF24 radio_vspi2(16, 17); // CE=16, CSN=17 (Module 4)
 
+// === Start/Stop Button ===
+#define BUTTON_PIN 32          // momentary push button to GND (uses internal pull-up)
+const unsigned long debounceDelay = 50; // ms
+int lastButtonReading = HIGH;  // raw reading from the previous loop
+int buttonState = HIGH;        // debounced state (HIGH = released, LOW = pressed)
+unsigned long lastDebounceTime = 0;
+
 // === State Variables ===
 byte ch[4] = {45, 45, 45, 45}; // Current channel for each module
 char mode = 'r';               // Default mode: random Bluetooth hopping
@@ -80,13 +87,59 @@ bool jammersActive = false;    // Flag for running state
 
 void setup() {
   Serial.begin(115200);
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
   initDisplay();
   printWelcomeMessage();
 }
 
 void loop() {
   handleSerialInput();
+  handleButton();
   if (jammersActive) runCurrentMode();
+}
+
+// === Physical Button ===
+
+// Debounced, edge-triggered: a press toggles between start and stop.
+void handleButton() {
+  int reading = digitalRead(BUTTON_PIN);
+  if (reading != lastButtonReading) {
+    lastDebounceTime = millis();
+  }
+  if ((millis() - lastDebounceTime) > debounceDelay) {
+    if (reading != buttonState) {
+      buttonState = reading;
+      if (buttonState == LOW) { // transitioned to pressed
+        toggleJammers();
+      }
+    }
+  }
+  lastButtonReading = reading;
+}
+
+void toggleJammers() {
+  if (jammersActive) stopJammers();
+  else startJammers();
+}
+
+void startJammers() {
+  if (!jammersActive) {
+    initializeJammers();
+    jammersActive = true;
+    logLine("Jammers activated and running");
+  } else {
+    logLine("Jammers are already active");
+  }
+}
+
+void stopJammers() {
+  if (jammersActive) {
+    deactivateJammers();
+    jammersActive = false;
+    logLine("Jammers deactivated");
+  } else {
+    logLine("Jammers are already inactive");
+  }
 }
 
 // === Display / Logging ===
@@ -164,22 +217,10 @@ void handleSerialInput() {
     String input = Serial.readStringUntil('\n');
     input.trim();
     if (input.equalsIgnoreCase("start")) {
-      if (!jammersActive) {
-        initializeJammers();
-        jammersActive = true;
-        logLine("Jammers activated and running");
-      } else {
-        logLine("Jammers are already active");
-      }
+      startJammers();
     }
     else if (input.equalsIgnoreCase("stop")) {
-      if (jammersActive) {
-        deactivateJammers();
-        jammersActive = false;
-        logLine("Jammers deactivated");
-      } else {
-        logLine("Jammers are already inactive");
-      }
+      stopJammers();
     }
     else if (input.length() == 1 && isValidMode(input.charAt(0))) {
       mode = input.charAt(0);

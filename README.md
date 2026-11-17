@@ -46,6 +46,21 @@ Defaults (editable at the top of `WhiteNoise/WhiteNoise.ino`):
 - I²C address: `0x3C` (some modules use `0x3D`)
 - SDA: `GPIO21`, SCL: `GPIO22`
 
+## 🔘 Start/Stop Button
+
+A single momentary push button toggles the jammers on and off (equivalent to the
+`start` / `stop` serial commands). It uses the ESP32's internal pull-up, so no
+external resistor is needed — just wire the button between the pin and GND.
+
+| Button Pin | ESP32 Pin | Notes                                   |
+|------------|-----------|-----------------------------------------|
+| Terminal 1 | GPIO32    | Input, internal pull-up enabled         |
+| Terminal 2 | GND       | —                                       |
+
+The press is software-debounced (50 ms) and edge-triggered: each press flips the
+state — press once to start, press again to stop. The button pin is editable at
+the top of `WhiteNoise/WhiteNoise.ino` (`BUTTON_PIN`).
+
 ## ⚠️ Power and Misc
 
 | nRF24L01+ Pin | Connection |
@@ -91,8 +106,8 @@ All modules: VCC to 3.3V, GND to GND (do NOT use 5V!)
 
 ## Serial Commands
 
-- `start` – Initialize and activate all 4 jammers
-- `stop` – Deactivate all jammers
+- `start` – Initialize and activate all 4 jammers (also available via the physical button)
+- `stop` – Deactivate all jammers (also available via the physical button)
 - `r` – Random Bluetooth hopping mode (odd/even channels)
 - `w` – WiFi channels mode
 - `b` – BLE advertising channels mode
