@@ -80,6 +80,11 @@ int lastButtonReading = HIGH;  // raw reading from the previous loop
 int buttonState = HIGH;        // debounced state (HIGH = released, LOW = pressed)
 unsigned long lastDebounceTime = 0;
 
+// === RGB Status LED ===
+#define LED_RED_PIN      33    // red leg (via ~220-330 ohm resistor)
+#define LED_GREEN_PIN    5     // green leg (via ~220-330 ohm resistor)
+#define RGB_COMMON_ANODE false // set true for a common-anode LED (shared leg to 3.3V)
+
 // === State Variables ===
 byte ch[4] = {45, 45, 45, 45}; // Current channel for each module
 char mode = 'r';               // Default mode: random Bluetooth hopping
@@ -88,8 +93,24 @@ bool jammersActive = false;    // Flag for running state
 void setup() {
   Serial.begin(115200);
   pinMode(BUTTON_PIN, INPUT_PULLUP);
+  pinMode(LED_RED_PIN, OUTPUT);
+  pinMode(LED_GREEN_PIN, OUTPUT);
+  updateStatusLed();
   initDisplay();
   printWelcomeMessage();
+}
+
+// === RGB Status LED ===
+
+void setLed(bool red, bool green) {
+  if (RGB_COMMON_ANODE) { red = !red; green = !green; }
+  digitalWrite(LED_RED_PIN, red ? HIGH : LOW);
+  digitalWrite(LED_GREEN_PIN, green ? HIGH : LOW);
+}
+
+// Red while jammers are active, green while idle.
+void updateStatusLed() {
+  setLed(jammersActive, !jammersActive);
 }
 
 void loop() {
@@ -126,6 +147,7 @@ void startJammers() {
   if (!jammersActive) {
     initializeJammers();
     jammersActive = true;
+    updateStatusLed();
     logLine("Jammers activated and running");
   } else {
     logLine("Jammers are already active");
@@ -136,6 +158,7 @@ void stopJammers() {
   if (jammersActive) {
     deactivateJammers();
     jammersActive = false;
+    updateStatusLed();
     logLine("Jammers deactivated");
   } else {
     logLine("Jammers are already inactive");

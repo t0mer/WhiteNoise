@@ -61,6 +61,25 @@ The press is software-debounced (50 ms) and edge-triggered: each press flips the
 state — press once to start, press again to stop. The button pin is editable at
 the top of `WhiteNoise/WhiteNoise.ino` (`BUTTON_PIN`).
 
+## 🚦 RGB Status LED
+
+An RGB LED shows the running state at a glance:
+
+- **Green** – jammers idle (standby)
+- **Red** – jammers active
+
+Only the red and green legs are used; the blue leg can be left unconnected. Each
+colour leg should go through a **~220–330 Ω** resistor. Defaults assume a
+**common-cathode** LED (shared leg to GND) — set `RGB_COMMON_ANODE true` at the
+top of `WhiteNoise/WhiteNoise.ino` for a common-anode LED (shared leg to 3.3V).
+
+| LED Leg       | ESP32 Pin | Notes                                  |
+|---------------|-----------|----------------------------------------|
+| Red           | GPIO33    | via ~220–330 Ω resistor                |
+| Green         | GPIO5     | via ~220–330 Ω resistor                |
+| Blue          | —         | unused                                 |
+| Common cathode| GND       | (or to 3.3V for a common-anode LED)    |
+
 ## ⚠️ Power and Misc
 
 | nRF24L01+ Pin | Connection |
