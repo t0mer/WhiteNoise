@@ -84,6 +84,9 @@ unsigned long lastDebounceTime = 0;
 #define LED_RED_PIN      33    // red leg (via ~220-330 ohm resistor)
 #define LED_GREEN_PIN    5     // green leg (via ~220-330 ohm resistor)
 #define RGB_COMMON_ANODE false // set true for a common-anode LED (shared leg to 3.3V)
+const unsigned long ledBlinkInterval = 300; // ms, red blink rate while active
+unsigned long lastLedToggle = 0;
+bool ledBlinkOn = false;
 
 // === State Variables ===
 byte ch[4] = {45, 45, 45, 45}; // Current channel for each module
@@ -108,14 +111,34 @@ void setLed(bool red, bool green) {
   digitalWrite(LED_GREEN_PIN, green ? HIGH : LOW);
 }
 
-// Red while jammers are active, green while idle.
+// Set the LED to match the current state: blinking red while active
+// (starting in the on phase), solid green while idle.
 void updateStatusLed() {
-  setLed(jammersActive, !jammersActive);
+  if (jammersActive) {
+    ledBlinkOn = true;
+    lastLedToggle = millis();
+    setLed(true, false);
+  } else {
+    setLed(false, true);
+  }
+}
+
+// Non-blocking blink driver, called every loop. Toggles the red LED while
+// active; the idle (solid green) state is set on transition in updateStatusLed.
+void handleStatusLed() {
+  if (!jammersActive) return;
+  unsigned long now = millis();
+  if (now - lastLedToggle >= ledBlinkInterval) {
+    lastLedToggle = now;
+    ledBlinkOn = !ledBlinkOn;
+    setLed(ledBlinkOn, false);
+  }
 }
 
 void loop() {
   handleSerialInput();
   handleButton();
+  handleStatusLed();
   if (jammersActive) runCurrentMode();
 }
 

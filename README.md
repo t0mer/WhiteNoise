@@ -65,8 +65,8 @@ the top of `WhiteNoise/WhiteNoise.ino` (`BUTTON_PIN`).
 
 An RGB LED shows the running state at a glance:
 
-- **Green** – jammers idle (standby)
-- **Red** – jammers active
+- **Green (solid)** – jammers idle (standby)
+- **Red (blinking)** – jammers active
 
 Only the red and green legs are used; the blue leg can be left unconnected. Each
 colour leg should go through a **~220–330 Ω** resistor. Defaults assume a
